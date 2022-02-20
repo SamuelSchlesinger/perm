@@ -1,7 +1,14 @@
-#![allow(dead_code)]
-
 use std::{collections::VecDeque, ops::Mul};
 
+/// Represents a permutation as a table, where a permutation
+/// is a bijective function from \[n\] to \[n\], where \[n\] = {0, 1, ... n}.
+///
+/// ```
+/// 0 1 2 3
+/// | | | |
+/// v v v v
+/// 1 3 2 0
+/// ```
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Table<const N: usize> {
     table: [usize; N],
@@ -19,24 +26,36 @@ impl<const N: usize> Mul for Table<N> {
     }
 }
 
-impl<const N: usize> From<Cycles<N>> for Table<N> {
-    fn from(_cycles: Cycles<N>) -> Self {
+impl<const N: usize> From<CycleDecomposition<N>> for Table<N> {
+    fn from(_cycles: CycleDecomposition<N>) -> Self {
         todo!()
     }
 }
 
+/// Represents a permutation as a cycle decomposition, where a permutation
+/// is a bijective function from \[n\] to \[n\], where \[n\] = {0, 1, ... n}.
+///
+/// If the table for a permutation looks like:
+///
+/// ```
+/// 0 1 2 3
+/// | | | |
+/// v v v v
+/// 1 3 2 0
+/// ```
+///
+/// then the cycle decomposition looks like:
+///
+/// ```
+/// (0 1 3) (2)
+/// ```
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Cycles<const N: usize> {
-    cycles: Vec<VecDeque<usize>>,
+pub struct CycleDecomposition<const N: usize> {
+    cycles: Box<[Box<[usize]>]>,
 }
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
-pub struct CycleType<const N: usize> {
-    cycle_type: [usize; N],
-}
-
-impl<const N: usize> Cycles<N> {
-    fn cycle_type(&self) -> CycleType<N> {
+impl<const N: usize> CycleDecomposition<N> {
+    pub fn cycle_type(&self) -> CycleType<N> {
         let mut cycle_type = [0; N];
         for cycle in self.cycles.iter() {
             cycle_type[cycle.len()] += 1;
@@ -45,10 +64,21 @@ impl<const N: usize> Cycles<N> {
     }
 }
 
-impl<const N: usize> From<Table<N>> for Cycles<N> {
-    fn from(table: Table<N>) -> Cycles<N> {
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct CycleType<const N: usize> {
+    cycle_type: [usize; N],
+}
+
+impl<const N: usize> CycleType<N> {
+    pub fn as_slice(&self) -> &[usize; N] {
+        &self.cycle_type
+    }
+}
+
+impl<const N: usize> From<Table<N>> for CycleDecomposition<N> {
+    fn from(table: Table<N>) -> CycleDecomposition<N> {
         let mut included = [false; N];
-        let mut cycles = Vec::new();
+        let mut tmp_cycles = Vec::new();
         loop {
             if let Some(i) = included
                 .iter()
@@ -70,7 +100,7 @@ impl<const N: usize> From<Table<N>> for Cycles<N> {
                 cycle.push_back(i);
                 loop {
                     if j == i {
-                        cycles.push(cycle);
+                        tmp_cycles.push(cycle);
                         break;
                     } else {
                         cycle.push_back(j);
@@ -82,7 +112,33 @@ impl<const N: usize> From<Table<N>> for Cycles<N> {
                 break;
             }
         }
-        Cycles { cycles }
+        fn normalize(v: &VecDeque<usize>) -> Box<[usize]> {
+            if let Some((highest, _)) = v
+                .iter()
+                .enumerate()
+                .max_by_key(|(_highest_index, highest_value)| *highest_value)
+            {
+                let mut b = vec![0; v.len()];
+                let n = v.len();
+                let mut i: usize = highest;
+                loop {
+                    b[(n + i - highest) % n] = v[i % n];
+                    i = (i + 1) % n;
+                    if i == highest {
+                        break;
+                    }
+                }
+                b.into_boxed_slice()
+            } else {
+                panic!("no no no no no");
+            }
+        }
+        let n_cycles = tmp_cycles.len();
+        let cycles = (0..n_cycles)
+            .map(|i| normalize(&tmp_cycles[i]))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        CycleDecomposition { cycles }
     }
 }
 
@@ -93,19 +149,20 @@ mod tests {
     #[test]
     fn cycles_from_table() {
         let table: Table<3> = Table { table: [1, 2, 0] };
-        let cycles: Cycles<3> = Cycles {
-            cycles: vec![VecDeque::from_iter(vec![0, 1, 2].into_iter())],
+        let cycles: CycleDecomposition<3> = CycleDecomposition {
+            cycles: vec![vec![2, 0, 1].into_boxed_slice()].into_boxed_slice(),
         };
-        assert_eq!(Cycles::from(table), cycles);
+        assert_eq!(CycleDecomposition::from(table), cycles);
 
         let table: Table<3> = Table { table: [0, 1, 2] };
-        let cycles: Cycles<3> = Cycles {
+        let cycles: CycleDecomposition<3> = CycleDecomposition {
             cycles: vec![
-                VecDeque::from_iter(vec![0].into_iter()),
-                VecDeque::from_iter(vec![1].into_iter()),
-                VecDeque::from_iter(vec![2].into_iter()),
-            ],
+                vec![0].into_boxed_slice(),
+                vec![1].into_boxed_slice(),
+                vec![2].into_boxed_slice(),
+            ]
+            .into_boxed_slice(),
         };
-        assert_eq!(Cycles::from(table), cycles);
+        assert_eq!(CycleDecomposition::from(table), cycles);
     }
 }
