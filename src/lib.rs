@@ -3,7 +3,7 @@ use std::{collections::VecDeque, ops::Mul};
 /// Represents a permutation as a table, where a permutation
 /// is a bijective function from \[n\] to \[n\], where \[n\] = {0, 1, ... n}.
 ///
-/// ```
+/// ```text
 /// 0 1 2 3
 /// | | | |
 /// v v v v
@@ -37,7 +37,7 @@ impl<const N: usize> From<CycleDecomposition<N>> for Table<N> {
 ///
 /// If the table for a permutation looks like:
 ///
-/// ```
+/// ```text
 /// 0 1 2 3
 /// | | | |
 /// v v v v
@@ -46,7 +46,7 @@ impl<const N: usize> From<CycleDecomposition<N>> for Table<N> {
 ///
 /// then the cycle decomposition looks like:
 ///
-/// ```
+/// ```text
 /// (0 1 3) (2)
 /// ```
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -58,12 +58,38 @@ impl<const N: usize> CycleDecomposition<N> {
     pub fn cycle_type(&self) -> CycleType<N> {
         let mut cycle_type = [0; N];
         for cycle in self.cycles.iter() {
-            cycle_type[cycle.len()] += 1;
+            cycle_type[cycle.len() - 1] += 1;
         }
         CycleType { cycle_type }
     }
 }
 
+/// Determines the cycle type, a representation of the conjugacy class of the
+/// permutation in the symmetric group.
+///
+/// If the table for a permutation looks like:
+///
+/// ```text
+/// 0 1 2 3
+/// | | | |
+/// v v v v
+/// 1 3 2 0
+/// ```
+///
+/// then the cycle decomposition looks like:
+///
+/// ```text
+/// (0 1 3) (2)
+/// ```
+///
+/// and the cycle type is:
+///
+/// ```text
+/// [ 1, 0, 1, 0 ]
+/// ```
+///
+/// because there is one cycle of length one, zero cycles of length
+/// two, one cycle of length three, and zero cycles of length four.
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct CycleType<const N: usize> {
     cycle_type: [usize; N],
@@ -154,6 +180,8 @@ mod tests {
         };
         assert_eq!(CycleDecomposition::from(table), cycles);
 
+        assert_eq!(cycles.cycle_type().as_slice(), &[0, 0, 1]);
+
         let table: Table<3> = Table { table: [0, 1, 2] };
         let cycles: CycleDecomposition<3> = CycleDecomposition {
             cycles: vec![
@@ -164,5 +192,7 @@ mod tests {
             .into_boxed_slice(),
         };
         assert_eq!(CycleDecomposition::from(table), cycles);
+
+        assert_eq!(cycles.cycle_type().as_slice(), &[3, 0, 0]);
     }
 }
