@@ -1,4 +1,6 @@
-# Perm <image align="right" src="./Flag_of_Perm_Krai.svg" width=250 height=250/>
+# Perm
+
+<image align="right" src="./Flag_of_Perm_Krai.svg" width=250 height=250/>
 
 A Rust library for manipulating permutations efficiently and ergonomically.
 
