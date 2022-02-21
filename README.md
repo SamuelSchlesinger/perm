@@ -1,6 +1,6 @@
 # Perm
 
-![Flag of Perm](./Flag_of_Perm_Krai.svg "Flag of Perm" = 250x250)
+<image src="./Flag_of_Perm_Krai.svg" width=250 height=250/>
 
 A Rust library for manipulating permutations efficiently and ergonomically.
 
