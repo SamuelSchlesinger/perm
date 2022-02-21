@@ -26,9 +26,19 @@ impl<const N: usize> Mul for Table<N> {
     }
 }
 
-impl<const N: usize> From<CycleDecomposition<N>> for Table<N> {
-    fn from(_cycles: CycleDecomposition<N>) -> Self {
-        todo!()
+impl<const N: usize> From<&CycleDecomposition<N>> for Table<N> {
+    fn from(cycles: &CycleDecomposition<N>) -> Self {
+        let mut table = Table { table: [0; N] };
+        for cycle in cycles.cycles.iter() {
+            for (i, j) in cycle
+                .iter()
+                .copied()
+                .zip(cycle.iter().copied().cycle().skip(1))
+            {
+                table.table[i] = j;
+            }
+        }
+        table
     }
 }
 
@@ -101,8 +111,8 @@ impl<const N: usize> CycleType<N> {
     }
 }
 
-impl<const N: usize> From<Table<N>> for CycleDecomposition<N> {
-    fn from(table: Table<N>) -> CycleDecomposition<N> {
+impl<const N: usize> From<&Table<N>> for CycleDecomposition<N> {
+    fn from(table: &Table<N>) -> CycleDecomposition<N> {
         let mut included = [false; N];
         let mut tmp_cycles = Vec::new();
         loop {
@@ -178,7 +188,9 @@ mod tests {
         let cycles: CycleDecomposition<3> = CycleDecomposition {
             cycles: vec![vec![2, 0, 1].into_boxed_slice()].into_boxed_slice(),
         };
-        assert_eq!(CycleDecomposition::from(table), cycles);
+        assert_eq!(CycleDecomposition::from(&table), cycles);
+
+        assert_eq!(table, Table::from(&cycles));
 
         assert_eq!(cycles.cycle_type().as_slice(), &[0, 0, 1]);
 
@@ -191,7 +203,9 @@ mod tests {
             ]
             .into_boxed_slice(),
         };
-        assert_eq!(CycleDecomposition::from(table), cycles);
+        assert_eq!(CycleDecomposition::from(&table), cycles);
+
+        assert_eq!(table, Table::from(&cycles));
 
         assert_eq!(cycles.cycle_type().as_slice(), &[3, 0, 0]);
     }
