@@ -2,6 +2,12 @@ use std::ops::Mul;
 
 use smallvec::SmallVec;
 
+/// A trait to overload the notion of a group acting on a type, akin
+/// to a group acting on a set in group theory.
+pub trait Action<Set: ?Sized> {
+    fn act(&self, element: &mut Set);
+}
+
 /// Represents a permutation as a table, where a permutation
 /// is a bijective function from \[n\] to \[n\], where \[n\] = {0, 1, ... n}.
 ///
@@ -14,6 +20,38 @@ use smallvec::SmallVec;
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Table<const N: usize> {
     table: [usize; N],
+}
+
+impl<const N: usize> Action<usize> for Table<N> {
+    fn act(&self, element: &mut usize) {
+        *element = self.table[*element % N];
+    }
+}
+
+impl<const N: usize, T> Action<[T]> for Table<N>
+where
+    Table<N>: Action<T>,
+{
+    fn act(&self, element: &mut [T]) {
+        for i in element.iter_mut() {
+            self.act(i);
+        }
+    }
+}
+
+#[cfg(feature = "random")]
+impl<const N: usize> rand::distributions::Distribution<Table<N>> for rand::distributions::Standard {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Table<N> {
+        let mut table = Table { table: [0; N] };
+        for i in 0..N {
+            table.table[i] = i;
+        }
+
+        use rand::seq::SliceRandom;
+
+        (&mut table.table).shuffle(rng);
+        table
+    }
 }
 
 impl<const N: usize> Table<N> {
@@ -80,14 +118,24 @@ impl<const N: usize> From<&CycleDecomposition<N>> for Table<N> {
 /// ```text
 /// (0 1 3) (2)
 /// ```
-#[derive(Debug)]
+///
+/// Beware that the equality instance here will not check for equality
+/// between group elements, but equality between their representations.
+/// As such, one must normalize a decomposition before checking equality
+/// in order to make sure the two refer to the same group element.
+#[derive(Debug, PartialEq, Eq)]
 pub struct CycleDecomposition<const N: usize> {
     enumeration: [usize; N],
     starts: SmallVec<[usize; 5]>,
 }
 
 impl<const N: usize> CycleDecomposition<N> {
+    /// Because cycle decompositions are not structurally unique, it isn't
+    /// useful to check PartialEq or Eq on them randomly. Instead, one should
+    /// normalize them first and then check if they're equal.
     pub fn normalize(&mut self) {
+        // TODO First make every cycle begin with their highest element
+        // and then sort the cycles by the size of their highest element.
         todo!()
     }
 }
@@ -220,8 +268,12 @@ impl<const N: usize> From<&Table<N>> for CycleDecomposition<N> {
     fn from(table: &Table<N>) -> CycleDecomposition<N> {
         let mut i = 0;
         let mut enumeration = [0; N];
+        // NB: It's probably cheaper to first figure out how many cycles there
+        // are and then preallocate the SmallVec with_capacity. Measure before
+        // making this change.
         let mut starts: SmallVec<[usize; 5]> = SmallVec::new();
-        // TODO Replace with bitvec. Tried once but I had problems using N.
+        // TODO Replace with bitvec. Tried once but I had problems using N because
+        // of it being parameterized in the impl head.
         let mut used = [false; N];
         loop {
             if let Some((next_unused_index, _)) = used.iter().enumerate().find(|(_i, e)| !*e) {
@@ -251,12 +303,51 @@ impl<const N: usize> From<&Table<N>> for CycleDecomposition<N> {
 mod tests {
     use super::*;
 
+    const N: usize = 100;
+
+    #[test]
+    fn cycle_cycles() {
+        let table: Table<N> = Table::cycle();
+        for i in 0..N {
+            let mut j = i;
+            table.act(&mut j);
+            assert_eq!(j, (i + 1) % N);
+        }
+    }
+
+    #[test]
+    fn identity_identifies() {
+        let table: Table<N> = Table::identity();
+        for i in 0..N {
+            let mut j = i;
+            table.act(&mut j);
+            assert_eq!(j, i);
+        }
+    }
+
     #[test]
     fn back_n_forth() {
-        let table: Table<3> = Table::cycle();
-        let cycle_decomposition_from_table: CycleDecomposition<3> = (&table).into();
+        let table: Table<N> = Table::cycle();
+        let cycle_decomposition_from_table: CycleDecomposition<N> = (&table).into();
         let table_from_cycle_decomposition_from_table = (&cycle_decomposition_from_table).into();
 
         assert_eq!(table, table_from_cycle_decomposition_from_table);
+    }
+
+    #[cfg(feature = "random")]
+    #[test]
+    fn random_round_trips() {
+        use rand::prelude::*;
+
+        let mut rng = thread_rng();
+
+        for _ in 0..100 {
+            let table: Table<N> = rng.gen();
+            let cycle_decomposition_from_table: CycleDecomposition<N> = (&table).into();
+            let table_from_cycle_decomposition_from_table =
+                (&cycle_decomposition_from_table).into();
+
+            assert_eq!(table, table_from_cycle_decomposition_from_table);
+        }
     }
 }
