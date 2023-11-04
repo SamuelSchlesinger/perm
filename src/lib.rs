@@ -1,3 +1,7 @@
+//! # Perm
+//!
+//! A library for permutations.
+
 use std::ops::Mul;
 
 use smallvec::SmallVec;
