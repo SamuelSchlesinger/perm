@@ -1,6 +1,6 @@
 //! # Perm
 //!
-//! A library for permutations.
+//! A library for munging permutations.
 
 use std::ops::Mul;
 
@@ -10,6 +10,11 @@ use smallvec::SmallVec;
 /// to a group acting on a set in group theory.
 pub trait Action<Set: ?Sized> {
     fn act(&self, element: &Set) -> Set;
+}
+
+/// A version of [`Action`] which mutates the underlying data.
+pub trait ActionMut<Set: ?Sized> {
+    fn act_mut(&self, element: &mut Set);
 }
 
 /// Represents a permutation as a table, where a permutation
@@ -29,6 +34,23 @@ pub struct Table<const N: usize> {
 impl<const N: usize> Action<usize> for Table<N> {
     fn act(&self, element: &usize) -> usize {
         self.table[*element % N]
+    }
+}
+
+impl<const N: usize, X> ActionMut<[X]> for Table<N>
+where
+    Table<N>: ActionMut<X>,
+{
+    fn act_mut(&self, element: &mut [X]) {
+        for x in element {
+            self.act_mut(x);
+        }
+    }
+}
+
+impl<const N: usize> ActionMut<usize> for Table<N> {
+    fn act_mut(&self, element: &mut usize) {
+        *element = self.table[*element % N];
     }
 }
 
@@ -80,6 +102,7 @@ impl<const N: usize> rand::distributions::Distribution<Table<N>> for rand::distr
 }
 
 impl<const N: usize> Table<N> {
+    /// Invert the given permutation.
     pub fn invert(&self) -> Self {
         let mut t = Table::identity();
         for i in 0..N {
@@ -88,6 +111,7 @@ impl<const N: usize> Table<N> {
         t
     }
 
+    /// A permutation which, leaving all other indices equal, swaps two specific indices.
     pub fn swap(i: usize, j: usize) -> Self {
         if i >= N || j >= N {
             panic!("why you so stupid");
@@ -100,6 +124,7 @@ impl<const N: usize> Table<N> {
         t
     }
 
+    /// The identity permutation.
     pub fn identity() -> Self {
         let mut table = Table { table: [0; N] };
         for i in 0..N {
@@ -108,12 +133,43 @@ impl<const N: usize> Table<N> {
         table
     }
 
+    /// A canonical cyclic permutation mapping `0 -> 1 -> 2 -> ... -> N - 1 -> 0`.
     pub fn cycle() -> Self {
         let mut table = Table { table: [0; N] };
         for i in 0..N {
             table.table[i] = (i + 1 + N) % N;
         }
         table
+    }
+
+    /// Create a permutation from an arbitrary array, checking the validity.
+    pub fn checked(table: [usize; N]) -> Option<Self> {
+        let mut bs = [false; N];
+        for i in 0..N {
+            bs[table[i]] = true;
+        }
+        if bs.iter().copied().all(|x| x) {
+            Some(Table { table })
+        } else {
+            None
+        }
+    }
+
+    /// Create a permutation without checking it's validity.
+    pub fn unchecked(table: [usize; N]) -> Self {
+        Table { table }
+    }
+}
+
+impl<const N: usize> Mul for &Table<N> {
+    type Output = Table<N>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let mut table = [0; N];
+        for i in 0..N {
+            table[i] = self.table[rhs.table[i]];
+        }
+        Table { table }
     }
 }
 
@@ -172,17 +228,6 @@ impl<const N: usize> From<&CycleDecomposition<N>> for Table<N> {
 pub struct CycleDecomposition<const N: usize> {
     enumeration: [usize; N],
     starts: SmallVec<[usize; 5]>,
-}
-
-impl<const N: usize> CycleDecomposition<N> {
-    /// Because cycle decompositions are not structurally unique, it isn't
-    /// useful to check PartialEq or Eq on them randomly. Instead, one should
-    /// normalize them first and then check if they're equal.
-    pub fn normalize(&mut self) {
-        // TODO First make every cycle begin with their highest element
-        // and then sort the cycles by the size of their highest element.
-        todo!()
-    }
 }
 
 /// A view into a particular cycle of a [`CycleDecomposition`].
