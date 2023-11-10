@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 /// A trait to overload the notion of a group acting on a type, akin
 /// to a group acting on a set in group theory.
 pub trait Action<Set: ?Sized> {
-    fn act(&self, element: &mut Set);
+    fn act(&self, element: &Set) -> Set;
 }
 
 /// Represents a permutation as a table, where a permutation
@@ -21,24 +21,45 @@ pub trait Action<Set: ?Sized> {
 /// v v v v
 /// 1 3 2 0
 /// ```
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Table<const N: usize> {
     table: [usize; N],
 }
 
 impl<const N: usize> Action<usize> for Table<N> {
-    fn act(&self, element: &mut usize) {
-        *element = self.table[*element % N];
+    fn act(&self, element: &usize) -> usize {
+        self.table[*element % N]
     }
 }
 
-impl<const N: usize, T> Action<[T]> for Table<N>
-where
-    Table<N>: Action<T>,
-{
-    fn act(&self, element: &mut [T]) {
-        for i in element.iter_mut() {
-            self.act(i);
+#[cfg(feature = "serde")]
+impl<const N: usize> serde::Serialize for Table<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let xs: Vec<usize> = self.table.iter().copied().collect();
+        xs.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'a, const N: usize> serde::Deserialize<'a> for Table<N> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let mut table = Table::identity();
+        let v = Vec::deserialize(deserializer)?;
+        if v.len() != N {
+            Err(<D::Error as serde::de::Error>::custom::<&str>(
+                "wrong number of bytes",
+            ))
+        } else {
+            for i in 0..N {
+                table.table[i] = v[i];
+            }
+            Ok(table)
         }
     }
 }
@@ -59,6 +80,26 @@ impl<const N: usize> rand::distributions::Distribution<Table<N>> for rand::distr
 }
 
 impl<const N: usize> Table<N> {
+    pub fn invert(&self) -> Self {
+        let mut t = Table::identity();
+        for i in 0..N {
+            t.table[self.table[i]] = i;
+        }
+        t
+    }
+
+    pub fn swap(i: usize, j: usize) -> Self {
+        if i >= N || j >= N {
+            panic!("why you so stupid");
+        }
+
+        let mut t = Table::identity();
+        let temp = t.table[i];
+        t.table[i] = t.table[j];
+        t.table[j] = temp;
+        t
+    }
+
     pub fn identity() -> Self {
         let mut table = Table { table: [0; N] };
         for i in 0..N {
@@ -310,12 +351,24 @@ mod tests {
     const N: usize = 100;
 
     #[test]
+    fn swap_swaps() {
+        let table: Table<N> = Table::swap(0, 1);
+        for i in 0..N {
+            if i == 0 {
+                assert_eq!(table.act(&i), 1)
+            } else if i == 1 {
+                assert_eq!(table.act(&i), 0)
+            } else {
+                assert_eq!(table.act(&i), i)
+            }
+        }
+    }
+
+    #[test]
     fn cycle_cycles() {
         let table: Table<N> = Table::cycle();
         for i in 0..N {
-            let mut j = i;
-            table.act(&mut j);
-            assert_eq!(j, (i + 1) % N);
+            assert_eq!(table.act(&i), (i + 1) % N);
         }
     }
 
@@ -323,10 +376,18 @@ mod tests {
     fn identity_identifies() {
         let table: Table<N> = Table::identity();
         for i in 0..N {
-            let mut j = i;
-            table.act(&mut j);
-            assert_eq!(j, i);
+            assert_eq!(table.act(&i), i);
         }
+    }
+
+    #[test]
+    fn inversion_inverts() {
+        let table: Table<N> = Table::cycle();
+        let mut manual_inverse_cycle: Table<N> = Table::identity();
+        for i in 0i32..(N as i32) {
+            manual_inverse_cycle.table[i as usize] = ((i - 1 + N as i32 + N as i32) as usize) % N;
+        }
+        assert_eq!(table.invert(), manual_inverse_cycle);
     }
 
     #[test]
